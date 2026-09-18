@@ -1,0 +1,30 @@
+cvm-version: 0.11.0
+
+cpus: 2
+memory: 2048
+
+# The shim terminates TLS and forwards plaintext inside the enclave.
+shim:
+  upstream-port: 8443
+  authenticated: true
+  paths:
+    - /v1/chat/completions
+    - /v1/completions
+    - /v1/responses
+    - /v1/embeddings
+    - /v1/models
+    - /healthz
+
+networks:
+  upstream:
+    # Attestation hosts are discovered at startup; allowlists do not support wildcards.
+    egress: open
+
+containers:
+  - name: adapter
+    image: ghcr.io/tinfoilsh/confidential-tinfoil-adapter@sha256:0000000000000000000000000000000000000000000000000000000000000000
+    networks: [upstream]
+    env:
+      - TINFOIL_GATEWAY_URL: https://gateway.tinfoil.sh
+    read_only: true
+    restart: always
