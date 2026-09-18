@@ -36,7 +36,7 @@ const trustedOwner = "tinfoilsh/"
 
 func main() {
 	addr := flag.String("addr", cmp.Or(os.Getenv("TINFOIL_ADDR"), ":8443"), "listen address")
-	gateway := flag.String("gateway", cmp.Or(os.Getenv("TINFOIL_GATEWAY_URL"), "https://gateway.tinfoil.sh"), "tinfoil-gateway base URL")
+	gateway := flag.String("gateway", cmp.Or(os.Getenv("TINFOIL_GATEWAY_URL"), "https://inference-gateway.tinfoil.sh"), "tinfoil-gateway base URL")
 	certFile := flag.String("cert", os.Getenv("TINFOIL_TLS_CERT"), "TLS certificate; without one the listener is plaintext, for a CVM whose shim already terminates TLS")
 	keyFile := flag.String("key", os.Getenv("TINFOIL_TLS_KEY"), "TLS private key")
 	flag.Parse()

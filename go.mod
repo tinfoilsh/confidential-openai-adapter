@@ -1,4 +1,4 @@
-module github.com/tinfoilsh/confidential-tinfoil-adapter
+module github.com/tinfoilsh/confidential-openai-adapter
 
 go 1.26.6
 
