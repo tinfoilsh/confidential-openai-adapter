@@ -1,8 +1,8 @@
 module github.com/tinfoilsh/confidential-openai-adapter
 
-go 1.26.6
+go 1.27.1
 
-require github.com/tinfoilsh/tinfoil-go v0.15.3
+require github.com/tinfoilsh/tinfoil-go v0.15.8-0.20260923144342-f44d8ac68ba1
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -87,6 +87,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 )
-
-// Replica re-attestation on gateway 422 responses is not in a tagged SDK release yet.
-replace github.com/tinfoilsh/tinfoil-go => ../tinfoil-go

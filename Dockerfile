@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.26-alpine@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468 AS build
-COPY --from=sdk / /src/tinfoil-go/
+FROM golang:1.27-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS build
 COPY go.mod go.sum *.go /src/tinfoil-adapter/
 WORKDIR /src/tinfoil-adapter
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -buildid=' -o /confidential-openai-adapter .
