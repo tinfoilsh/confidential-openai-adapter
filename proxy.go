@@ -17,7 +17,10 @@ import (
 
 const maxRequestBody = 8 << 20
 
-const userCacheSecretField = "user_cache_secret"
+const (
+	userCacheSecretField = "user_cache_secret"
+	cacheSaltField       = "cache_salt"
+)
 
 type adapter struct {
 	models []*model
@@ -81,12 +84,14 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown model %q: this endpoint serves %s", want, names(a.models)))
 		return
 	}
-	raw = a.scopeCache(body, raw, r.URL.Path, apiKey)
+	if raw, err = a.scopeCache(body, raw, r.URL.Path, apiKey); err != nil {
+		writeError(w, http.StatusBadRequest, "could not scope prompt cache")
+		return
+	}
 
-	// The SDK needs a replayable body when it re-encrypts for another replica.
+	r.Header.Set("Content-Type", "application/json")
 	r.Body = io.NopCloser(bytes.NewReader(raw))
 	r.ContentLength = int64(len(raw))
-	r.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }
 	m.proxy.ServeHTTP(w, r)
 }
 
@@ -101,18 +106,21 @@ func (a *adapter) list(w http.ResponseWriter, r *http.Request) {
 
 // scopeCache replaces the SDK's shared default with a per-API-key secret.
 // Keep caller-supplied secrets and limit injection to the SDK's prefix-cache paths.
-func (a *adapter) scopeCache(body map[string]json.RawMessage, raw []byte, path, apiKey string) []byte {
-	if unquote(body[userCacheSecretField]) != "" || !strings.HasSuffix(path, "/completions") && !strings.HasSuffix(path, "/responses") {
-		return raw
+func (a *adapter) scopeCache(body map[string]json.RawMessage, raw []byte, path, apiKey string) ([]byte, error) {
+	if !strings.HasSuffix(path, "/completions") && !strings.HasSuffix(path, "/responses") {
+		return raw, nil
 	}
 	mac := hmac.New(sha256.New, a.root)
 	mac.Write([]byte(apiKey))
-	body[userCacheSecretField] = json.RawMessage(`"` + hex.EncodeToString(mac.Sum(nil)) + `"`)
-	scoped, err := json.Marshal(body)
-	if err != nil {
-		return raw
+	tenant := mac.Sum(nil)
+	if unquote(body[userCacheSecretField]) == "" {
+		body[userCacheSecretField] = json.RawMessage(`"` + hex.EncodeToString(tenant) + `"`)
 	}
-	return scoped
+	mac.Reset()
+	mac.Write(tenant)
+	mac.Write([]byte(unquote(body[userCacheSecretField])))
+	body[cacheSaltField] = json.RawMessage(`"` + hex.EncodeToString(mac.Sum(nil)) + `"`)
+	return json.Marshal(body)
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

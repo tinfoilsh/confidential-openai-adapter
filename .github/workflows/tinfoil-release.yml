@@ -22,9 +22,6 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/tinfoilsh/confidential-openai-adapter
-  SDK_REPO: tinfoilsh/tinfoil-go
-  # Must match the `replace` directive in go.mod.
-  SDK_REF: f0c18dd573b759f96654dc246f7fa18b6014d309
 
 jobs:
   build:
@@ -40,14 +37,6 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           path: adapter
-          persist-credentials: false
-
-      - name: Checkout the SDK build context
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          repository: ${{ env.SDK_REPO }}
-          ref: ${{ env.SDK_REF }}
-          path: sdk
           persist-credentials: false
 
       - name: Check if version tag already exists
@@ -87,7 +76,6 @@ jobs:
           SOURCE_DATE_EPOCH: 0
         with:
           context: adapter
-          build-contexts: sdk=sdk
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
