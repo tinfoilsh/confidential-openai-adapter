@@ -22,7 +22,7 @@ networks:
 
 containers:
   - name: adapter
-    image: "ghcr.io/tinfoilsh/confidential-openai-adapter@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    image: "ghcr.io/tinfoilsh/confidential-openai-adapter@sha256:57a1b33101403fe2f703c719d151c04ef64489987c7eb6002cceec096d648aaa" # v0.1.1
     networks: [upstream]
     env:
       - TINFOIL_GATEWAY_URL: https://inference-gateway.tinfoil.sh
