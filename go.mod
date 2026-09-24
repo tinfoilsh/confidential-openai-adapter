@@ -2,7 +2,7 @@ module github.com/tinfoilsh/confidential-openai-adapter
 
 go 1.27.1
 
-require github.com/tinfoilsh/tinfoil-go v0.15.8-0.20260923144342-f44d8ac68ba1
+require github.com/tinfoilsh/tinfoil-go v0.15.8-0.20260924012310-ff60af7e9ea6
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect

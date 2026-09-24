@@ -9,26 +9,32 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strings"
+	"sync/atomic"
+
+	tinfoil "github.com/tinfoilsh/tinfoil-go"
 )
 
 const maxRequestBody = 8 << 20
 
 const (
 	userCacheSecretField = "user_cache_secret"
-	cacheSaltField       = "cache_salt"
+	promptCacheKeyField  = "prompt_cache_key"
 )
 
 type adapter struct {
-	models []*model
-	root   []byte
+	catalog *atomic.Pointer[tinfoil.Catalog]
+	proxy   *httputil.ReverseProxy
+	root    []byte
 }
 
-func newAdapter(models []*model, root []byte) http.Handler {
-	a := &adapter{models: models, root: root}
+func newAdapter(gw *tinfoil.Gateway, catalog *atomic.Pointer[tinfoil.Catalog], gateway *url.URL, root []byte) http.Handler {
+	a := &adapter{catalog: catalog, proxy: newProxy(gateway, gw.HTTPClient().Transport), root: root}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") })
 	mux.HandleFunc("GET /v1/models", a.list)
@@ -49,7 +55,7 @@ func newProxy(gateway *url.URL, sealing http.RoundTripper) *httputil.ReverseProx
 		},
 		Transport:     sealing,
 		FlushInterval: -1,
-		ErrorHandler:  func(w http.ResponseWriter, r *http.Request, err error) {
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			slog.Error("upstream failed", "path", r.URL.Path, "error", err)
 			writeError(w, http.StatusBadGateway, "gateway unavailable")
 		},
@@ -73,15 +79,13 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "body must be a JSON object")
 		return
 	}
-	want := unquote(body["model"])
-	var m *model
-	for _, served := range a.models {
-		if served.name == want {
-			m = served
-		}
+	models := a.models()
+	if len(models) == 0 {
+		writeError(w, http.StatusServiceUnavailable, "gateway catalog unavailable")
+		return
 	}
-	if m == nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown model %q: this endpoint serves %s", want, names(a.models)))
+	if want := unquote(body["model"]); !slices.Contains(models, want) {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown model %q: this endpoint serves %s", want, strings.Join(models, ", ")))
 		return
 	}
 	if raw, err = a.scopeCache(body, raw, r.URL.Path, apiKey); err != nil {
@@ -91,36 +95,39 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 
 	r.Header.Set("Content-Type", "application/json")
 	r.Body = io.NopCloser(bytes.NewReader(raw))
+	r.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }
 	r.ContentLength = int64(len(raw))
-	m.proxy.ServeHTTP(w, r)
+	a.proxy.ServeHTTP(w, r)
 }
 
 func (a *adapter) list(w http.ResponseWriter, r *http.Request) {
-	data := make([]map[string]string, 0, len(a.models))
-	for _, m := range a.models {
-		data = append(data, map[string]string{"id": m.name, "object": "model", "owned_by": "tinfoil"})
+	models := a.models()
+	data := make([]map[string]string, 0, len(models))
+	for _, name := range models {
+		data = append(data, map[string]string{"id": name, "object": "model", "owned_by": "tinfoil"})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
 }
 
-// scopeCache replaces the SDK's shared default with a per-API-key secret.
-// Keep caller-supplied secrets and limit injection to the SDK's prefix-cache paths.
+// scopeCache sets a per-API-key cache secret, split by prompt_cache_key when
+// given; the SDK derives cache_salt from it. Limited to prefix-cache paths.
 func (a *adapter) scopeCache(body map[string]json.RawMessage, raw []byte, path, apiKey string) ([]byte, error) {
 	if !strings.HasSuffix(path, "/completions") && !strings.HasSuffix(path, "/responses") {
 		return raw, nil
 	}
 	mac := hmac.New(sha256.New, a.root)
 	mac.Write([]byte(apiKey))
-	tenant := mac.Sum(nil)
-	if unquote(body[userCacheSecretField]) == "" {
-		body[userCacheSecretField] = json.RawMessage(`"` + hex.EncodeToString(tenant) + `"`)
+	if key := unquote(body[promptCacheKeyField]); key != "" {
+		mac = hmac.New(sha256.New, mac.Sum(nil))
+		mac.Write([]byte(key))
 	}
-	mac.Reset()
-	mac.Write(tenant)
-	mac.Write([]byte(unquote(body[userCacheSecretField])))
-	body[cacheSaltField] = json.RawMessage(`"` + hex.EncodeToString(mac.Sum(nil)) + `"`)
+	body[userCacheSecretField] = json.RawMessage(`"` + hex.EncodeToString(mac.Sum(nil)) + `"`)
 	return json.Marshal(body)
+}
+
+func (a *adapter) models() []string {
+	return slices.Sorted(maps.Keys(*a.catalog.Load()))
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
