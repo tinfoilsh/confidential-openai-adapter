@@ -1,6 +1,6 @@
 module github.com/tinfoilsh/confidential-openai-adapter
 
-go 1.27.1
+go 1.27.3
 
 require github.com/tinfoilsh/tinfoil-go v0.15.8-0.20260924012310-ff60af7e9ea6
 
