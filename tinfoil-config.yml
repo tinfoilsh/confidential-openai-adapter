@@ -6,6 +6,7 @@ memory: 2048
 # The shim terminates TLS and forwards plaintext inside the enclave.
 shim:
   upstream-port: 8443
+  drain_connections: true
   authenticated: true
   paths:
     - /v1/chat/completions
