@@ -2,7 +2,7 @@ module github.com/tinfoilsh/confidential-openai-adapter
 
 go 1.27.4
 
-require github.com/tinfoilsh/tinfoil-go v0.17.0-rc.11
+require github.com/tinfoilsh/tinfoil-go v0.17.0-rc.12
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -65,7 +65,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tinfoilsh/encrypted-http-body-protocol v0.6.0 // indirect
-	github.com/tinfoilsh/go-sev-guest v0.0.0-20260818055935-bec7bdb637fd // indirect
+	github.com/tinfoilsh/go-sev-guest v0.0.0-20261118213236-e9f4702918d3 // indirect
 	github.com/transparency-dev/formats v0.1.1 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
