@@ -42,10 +42,11 @@ func main() {
 	var catalog atomic.Pointer[tinfoil.Catalog]
 	catalog.Store(&tinfoil.Catalog{})
 	go refreshCatalog(base, &catalog)
-	gw, err := tinfoil.NewGateway(base.String()+"/v1/",
-		func() tinfoil.Catalog { return *catalog.Load() },
-		tinfoil.WithUserCacheSecret(hex.EncodeToString(root)),
-	)
+	gw, err := tinfoil.NewGatewayHTTPClient(context.Background(), &tinfoil.GatewayOptions{
+		URL:             base.String() + "/v1/",
+		Catalog:         func() tinfoil.Catalog { return *catalog.Load() },
+		UserCacheSecret: hex.EncodeToString(root),
+	})
 	if err != nil {
 		slog.Error("configure gateway", "gateway", base, "error", err)
 		os.Exit(1)
@@ -70,7 +71,7 @@ func main() {
 
 func refreshCatalog(gateway *url.URL, catalog *atomic.Pointer[tinfoil.Catalog]) {
 	for ; ; time.Sleep(catalogRefresh) {
-		fetched, err := tinfoil.FetchCatalog(gateway.Host)
+		fetched, err := tinfoil.FetchCatalog(context.Background(), gateway.Host)
 		if err != nil {
 			slog.Warn("fetch catalog", "gateway", gateway, "error", err)
 			continue

@@ -33,8 +33,8 @@ type adapter struct {
 	root    []byte
 }
 
-func newAdapter(gw *tinfoil.Gateway, catalog *atomic.Pointer[tinfoil.Catalog], gateway *url.URL, root []byte) http.Handler {
-	a := &adapter{catalog: catalog, proxy: newProxy(gateway, gw.HTTPClient().Transport), root: root}
+func newAdapter(gw *tinfoil.GatewayHTTPClient, catalog *atomic.Pointer[tinfoil.Catalog], gateway *url.URL, root []byte) http.Handler {
+	a := &adapter{catalog: catalog, proxy: newProxy(gateway, gw.Transport), root: root}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") })
 	mux.HandleFunc("GET /v1/models", a.list)
