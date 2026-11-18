@@ -42,18 +42,14 @@ func main() {
 	var catalog atomic.Pointer[tinfoil.Catalog]
 	catalog.Store(&tinfoil.Catalog{})
 	go refreshCatalog(base, &catalog)
-	gw, err := tinfoil.NewGatewayHTTPClient(context.Background(), &tinfoil.GatewayOptions{
-		URL:             base.String() + "/v1/",
-		Catalog:         func() tinfoil.Catalog { return *catalog.Load() },
-		UserCacheSecret: hex.EncodeToString(root),
-	})
+	gw, err := newGateway(base, func() tinfoil.Catalog { return *catalog.Load() }, root)
 	if err != nil {
 		slog.Error("configure gateway", "gateway", base, "error", err)
 		os.Exit(1)
 	}
 
 	// Leave WriteTimeout unset for long-running streamed completions.
-	srv := &http.Server{Addr: *addr, Handler: newAdapter(gw, &catalog, base, root), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: *addr, Handler: newAdapter(gw, base, root), ReadHeaderTimeout: 10 * time.Second}
 	signalled, _ := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	context.AfterFunc(signalled, func() { srv.Shutdown(context.Background()) })
 
@@ -67,6 +63,22 @@ func main() {
 		slog.Error("serve", "error", err)
 		os.Exit(1)
 	}
+}
+
+// newGateway serves only the models in modelRepos, each verified against its
+// pinned repository; the catalog supplies replica hosts and nothing else.
+func newGateway(base *url.URL, catalog func() tinfoil.Catalog, root []byte) (*tinfoil.GatewayHTTPClient, error) {
+	pins := make(map[string]tinfoil.ModelPin, len(modelRepos))
+	for model, repo := range modelRepos {
+		pins[model] = tinfoil.ModelPin{Repo: repo}
+	}
+	return tinfoil.NewGatewayHTTPClient(context.Background(), &tinfoil.GatewayOptions{
+		URL:              base.String() + "/v1/",
+		Catalog:          catalog,
+		ModelPins:        pins,
+		PinnedModelsOnly: true,
+		UserCacheSecret:  hex.EncodeToString(root),
+	})
 }
 
 func refreshCatalog(gateway *url.URL, catalog *atomic.Pointer[tinfoil.Catalog]) {

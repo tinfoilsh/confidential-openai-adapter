@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,13 +10,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"slices"
 	"strings"
-	"sync/atomic"
 
 	tinfoil "github.com/tinfoilsh/tinfoil-go"
 )
@@ -28,13 +27,13 @@ const (
 )
 
 type adapter struct {
-	catalog *atomic.Pointer[tinfoil.Catalog]
+	gateway *tinfoil.GatewayHTTPClient
 	proxy   *httputil.ReverseProxy
 	root    []byte
 }
 
-func newAdapter(gw *tinfoil.GatewayHTTPClient, catalog *atomic.Pointer[tinfoil.Catalog], gateway *url.URL, root []byte) http.Handler {
-	a := &adapter{catalog: catalog, proxy: newProxy(gateway, gw.Transport), root: root}
+func newAdapter(gw *tinfoil.GatewayHTTPClient, gateway *url.URL, root []byte) http.Handler {
+	a := &adapter{gateway: gw, proxy: newProxy(gateway, gw.Transport), root: root}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") })
 	mux.HandleFunc("GET /v1/models", a.list)
@@ -79,7 +78,7 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "body must be a JSON object")
 		return
 	}
-	models := a.models()
+	models := a.models(r.Context())
 	if len(models) == 0 {
 		writeError(w, http.StatusServiceUnavailable, "gateway catalog unavailable")
 		return
@@ -101,7 +100,7 @@ func (a *adapter) forward(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *adapter) list(w http.ResponseWriter, r *http.Request) {
-	models := a.models()
+	models := a.models(r.Context())
 	data := make([]map[string]string, 0, len(models))
 	for _, name := range models {
 		data = append(data, map[string]string{"id": name, "object": "model", "owned_by": "tinfoil"})
@@ -126,8 +125,13 @@ func (a *adapter) scopeCache(body map[string]json.RawMessage, raw []byte, path, 
 	return json.Marshal(body)
 }
 
-func (a *adapter) models() []string {
-	return slices.Sorted(maps.Keys(*a.catalog.Load()))
+// models lists the catalog's models that have a pinned repository.
+func (a *adapter) models(ctx context.Context) []string {
+	models, err := a.gateway.Models(ctx)
+	if err != nil {
+		return nil
+	}
+	return models
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
